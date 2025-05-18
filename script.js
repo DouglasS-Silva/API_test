@@ -1,6 +1,7 @@
 // Variáveis globais
 let firesChart = null;
 let airChart = null;
+let weatherChart = null;
 let map = null;
 let currentRegion = 'Norte';
 const OPENWEATHER_API_KEY = '709a870446d4a4da539f2cc0e452fce6'; // Substitua pela sua chave OpenWeatherMap
@@ -180,6 +181,161 @@ document.getElementById('fetchAir').addEventListener('click', async () => {
   }
 });
 
+// API Previsão do Tempo (OpenWeatherMap)
+async function fetchWeather(city) {
+  const resultDiv = document.getElementById('weatherData');
+  resultDiv.innerHTML = '<div class="loading"></div> Buscando dados meteorológicos...';
+  
+  try {
+    if (!OPENWEATHER_API_KEY) {
+      throw new Error('Chave API não configurada');
+    }
+
+    // 1. Obter coordenadas da cidade
+    const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)},BR&limit=1&appid=${OPENWEATHER_API_KEY}`;
+    const geoResponse = await fetch(geoUrl);
+    
+    if (!geoResponse.ok) {
+      throw new Error('Erro ao buscar localização');
+    }
+    
+    const geoData = await geoResponse.json();
+    if (!geoData.length) throw new Error('Cidade não encontrada');
+    
+    const { lat, lon } = geoData[0];
+    
+    // 2. Obter previsão do tempo
+    const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=pt_br`;
+    const weatherResponse = await fetch(weatherUrl);
+    
+    if (!weatherResponse.ok) {
+      throw new Error('Erro ao buscar previsão do tempo');
+    }
+    
+    const weatherData = await weatherResponse.json();
+    
+    // 3. Obter previsão para os próximos dias
+    const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=pt_br&cnt=5`;
+    const forecastResponse = await fetch(forecastUrl);
+    
+    if (!forecastResponse.ok) {
+      throw new Error('Erro ao buscar previsão extendida');
+    }
+    
+    const forecastData = await forecastResponse.json();
+    
+    // Processar dados
+    const weather = {
+      temp: Math.round(weatherData.main.temp),
+      feels_like: Math.round(weatherData.main.feels_like),
+      humidity: weatherData.main.humidity,
+      wind: Math.round(weatherData.wind.speed * 3.6), // converter para km/h
+      description: weatherData.weather[0].description,
+      icon: weatherData.weather[0].icon,
+      forecast: forecastData.list.slice(0, 5).map(item => ({
+        date: new Date(item.dt * 1000),
+        temp: Math.round(item.main.temp),
+        icon: item.weather[0].icon,
+        description: item.weather[0].description
+      }))
+    };
+    
+    // Exibir resultados
+    resultDiv.innerHTML = `
+      <div class="weather-card">
+        <div class="weather-header">
+          <h3>${city}</h3>
+          <span>${new Date().toLocaleDateString('pt-BR')}</span>
+        </div>
+        
+        <div class="weather-main">
+          <div class="weather-temp">${weather.temp}°C</div>
+          <div>
+            <i class="wi wi-owm-${weather.icon}"></i>
+            <p>${weather.description}</p>
+          </div>
+        </div>
+        
+        <div class="weather-details">
+          <div class="weather-detail">
+            <i class="fas fa-temperature-low"></i>
+            <p>Sensação: ${weather.feels_like}°C</p>
+          </div>
+          <div class="weather-detail">
+            <i class="fas fa-tint"></i>
+            <p>Umidade: ${weather.humidity}%</p>
+          </div>
+          <div class="weather-detail">
+            <i class="fas fa-wind"></i>
+            <p>Vento: ${weather.wind} km/h</p>
+          </div>
+          <div class="weather-detail">
+            <i class="fas fa-cloud"></i>
+            <p>${weatherData.clouds.all}% nuvens</p>
+          </div>
+        </div>
+        
+        <h4 style="margin-top: 20px;">Próximas Horas</h4>
+        <div class="forecast-container">
+          ${weather.forecast.map(item => `
+            <div class="forecast-item">
+              <p>${item.date.getHours()}h</p>
+              <i class="wi wi-owm-${item.icon}"></i>
+              <p>${item.temp}°C</p>
+              <small>${item.description}</small>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    
+    updateWeatherChart(weather.forecast);
+    
+  } catch (error) {
+    resultDiv.innerHTML = `
+      <div class="error">
+        Falha ao buscar previsão do tempo:<br>
+        ${error.message}
+      </div>
+    `;
+    console.error('Erro ao buscar previsão:', error);
+  }
+}
+
+function updateWeatherChart(forecast) {
+  const ctx = document.getElementById('weatherChart');
+  
+  if (weatherChart) weatherChart.destroy();
+  
+  weatherChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: forecast.map(item => item.date.getHours() + 'h'),
+      datasets: [{
+        label: 'Temperatura (°C)',
+        data: forecast.map(item => item.temp),
+        borderColor: '#FF5722',
+        backgroundColor: 'rgba(255, 87, 34, 0.1)',
+        fill: true,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: false
+        }
+      }
+    }
+  });
+}
+
 // Funções auxiliares
 function formatPollutant(pollutant) {
   const names = {
@@ -262,6 +418,11 @@ document.getElementById('fetchFires').addEventListener('click', () => {
   fetchFiresByRegion(region);
 });
 
+document.getElementById('fetchWeather').addEventListener('click', () => {
+  const city = document.getElementById('weatherCitySelect').value;
+  fetchWeather(city);
+});
+
 document.querySelectorAll('.region-buttons button').forEach(btn => {
   btn.addEventListener('click', () => {
     currentRegion = btn.dataset.region;
@@ -274,4 +435,11 @@ document.querySelectorAll('.region-buttons button').forEach(btn => {
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   fetchFiresByRegion(currentRegion);
+  
+  // Carrega dados iniciais para a primeira cidade
+  const initialCity = document.getElementById('citySelect').value;
+  document.getElementById('fetchAir').click();
+  
+  const initialWeatherCity = document.getElementById('weatherCitySelect').value;
+  document.getElementById('fetchWeather').click();
 });
