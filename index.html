@@ -3,33 +3,64 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Teste APIs Ambientais</title>
+  <title>Painel Ambiental do Brasil</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css">
 </head>
 <body>
   <div class="container">
-    <h1>🌎 Teste de APIs Ambientais</h1>
+    <h1>🌎 Painel Ambiental do Brasil</h1>
     
-    <section class="api-section">
-      <h2>🔥 Teste API Queimadas (NASA FIRMS)</h2>
-      <button id="testFires">Testar Queimadas</button>
-      <div id="firesResult" class="result"></div>
-      <canvas id="firesChart"></canvas>
-    </section>
-
-    <section class="api-section">
-      <h2>🌫️ Teste API Qualidade do Ar (IQAir)</h2>
-      <div class="input-group">
-        <select id="citySelect">
-          <option value="São Paulo,Sao Paulo">São Paulo, SP</option>
-          <option value="Rio de Janeiro,Rio de Janeiro">Rio de Janeiro, RJ</option>
-          <option value="Belo Horizonte,Minas Gerais">Belo Horizonte, MG</option>
-        </select>
-        <button id="testAir">Testar Qualidade do Ar</button>
+    <div class="map-container">
+      <div id="brazilMap"></div>
+      <div class="map-overlay">
+        <h3>Clique em uma região</h3>
+        <div class="region-buttons">
+          <button data-region="Norte">Norte</button>
+          <button data-region="Nordeste">Nordeste</button>
+          <button data-region="Centro-Oeste">Centro-Oeste</button>
+          <button data-region="Sudeste">Sudeste</button>
+          <button data-region="Sul">Sul</button>
+        </div>
       </div>
-      <div id="airResult" class="result"></div>
-      <canvas id="airChart"></canvas>
+    </div>
+    
+    <section class="data-section">
+      <div class="data-panel">
+        <h2>🔥 Focos de Queimadas</h2>
+        <div class="filters">
+          <select id="regionSelect">
+            <option value="">Todas as regiões</option>
+            <option value="Norte">Norte</option>
+            <option value="Nordeste">Nordeste</option>
+            <option value="Centro-Oeste">Centro-Oeste</option>
+            <option value="Sudeste">Sudeste</option>
+            <option value="Sul">Sul</option>
+          </select>
+          <button id="fetchFires">Atualizar Dados</button>
+        </div>
+        <div id="firesData" class="data-container"></div>
+        <canvas id="firesChart"></canvas>
+      </div>
+      
+      <div class="data-panel">
+        <h2>🌫️ Qualidade do Ar</h2>
+        <div class="input-group">
+          <select id="citySelect">
+            <option value="São Paulo,Sao Paulo">São Paulo, SP</option>
+            <option value="Rio de Janeiro,Rio de Janeiro">Rio de Janeiro, RJ</option>
+            <option value="Belo Horizonte,Minas Gerais">Belo Horizonte, MG</option>
+            <option value="Salvador,Bahia">Salvador, BA</option>
+            <option value="Fortaleza,Ceara">Fortaleza, CE</option>
+            <option value="Manaus,Amazonas">Manaus, AM</option>
+          </select>
+          <button id="fetchAir">Buscar Dados</button>
+        </div>
+        <div id="airData" class="data-container"></div>
+        <canvas id="airChart"></canvas>
+      </div>
     </section>
   </div>
 
