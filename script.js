@@ -1,10 +1,47 @@
-// Variáveis para os gráficos
+// Variáveis globais
 let firesChart = null;
 let airChart = null;
+let map = null;
+let currentRegion = 'Norte';
 
-// 1. Teste API Queimadas (NASA FIRMS)
-document.getElementById('testFires').addEventListener('click', async () => {
-  const resultDiv = document.getElementById('firesResult');
+// Inicialização do mapa
+function initMap() {
+  map = L.map('brazilMap').setView([-15, -55], 4);
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  // Adiciona regiões clicáveis
+  const regions = {
+    'Norte': { lat: -3, lng: -62, color: '#4CAF50' },
+    'Nordeste': { lat: -8, lng: -42, color: '#2196F3' },
+    'Centro-Oeste': { lat: -15, lng: -54, color: '#FFC107' },
+    'Sudeste': { lat: -20, lng: -45, color: '#F44336' },
+    'Sul': { lat: -27, lng: -52, color: '#9C27B0' }
+  };
+
+  Object.entries(regions).forEach(([name, data]) => {
+    L.circleMarker([data.lat, data.lng], {
+      radius: 20,
+      fillColor: data.color,
+      color: '#fff',
+      weight: 2,
+      opacity: 1,
+      fillOpacity: 0.8
+    }).addTo(map)
+      .bindPopup(`<b>${name}</b><br>Clique para ver dados`)
+      .on('click', () => {
+        currentRegion = name;
+        document.getElementById('regionSelect').value = name;
+        fetchFiresByRegion(name);
+      });
+  });
+}
+
+// API Queimadas
+async function fetchFiresByRegion(region) {
+  const resultDiv = document.getElementById('firesData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados de queimadas...';
   
   try {
@@ -17,23 +54,38 @@ document.getElementById('testFires').addEventListener('click', async () => {
     
     const data = await response.text();
     const lines = data.split('\n').slice(1).filter(line => line.trim() !== '');
-    const fireCount = lines.length;
     
-    // Mostra resultados
+    // Filtra por região
+    const regionFires = lines.filter(line => {
+      const lat = parseFloat(line.split(',')[1]);
+      if (isNaN(lat)) return false;
+      
+      if (region === 'Norte') return lat < -2;
+      if (region === 'Nordeste') return lat > -10 && lat < -2;
+      if (region === 'Centro-Oeste') return lat > -15 && lat < -10;
+      if (region === 'Sudeste') return lat > -20 && lat < -15;
+      if (region === 'Sul') return lat > -30 && lat < -20;
+      return true;
+    }).slice(0, 50);
+
+    // Exibe resultados
     resultDiv.innerHTML = `
-      <h3>Dados de Queimadas</h3>
-      <p>Total de focos recentes: <strong>${fireCount}</strong></p>
-      <p>Últimos 5 focos:</p>
-      <ul>
-        ${lines.slice(0, 5).map(line => {
-          const [country, lat, long, brightness] = line.split(',');
-          return `<li>Lat: ${lat}, Long: ${long} (${brightness}°C)</li>`;
+      <h3>Focos na região ${region}</h3>
+      <p>Total de focos: <strong>${regionFires.length}</strong></p>
+      <div class="fires-list">
+        ${regionFires.slice(0, 10).map(line => {
+          const [_, lat, long, brightness, acq_date] = line.split(',');
+          return `
+            <div class="fire-point">
+              <strong>${lat}, ${long}</strong><br>
+              ${brightness}°C - ${acq_date}
+            </div>
+          `;
         }).join('')}
-      </ul>
+      </div>
     `;
     
-    // Atualiza gráfico
-    updateFiresChart(fireCount);
+    updateFiresChart(regionFires.length);
     
   } catch (error) {
     resultDiv.innerHTML = `
@@ -42,19 +94,17 @@ document.getElementById('testFires').addEventListener('click', async () => {
         ${error.message}
       </div>
     `;
-    console.error('Erro NASA FIRMS:', error);
   }
-});
+}
 
-// 2. Teste API Qualidade do Ar (IQAir)
-document.getElementById('testAir').addEventListener('click', async () => {
+// API Qualidade do Ar
+document.getElementById('fetchAir').addEventListener('click', async () => {
   const [city, state] = document.getElementById('citySelect').value.split(',');
-  const resultDiv = document.getElementById('airResult');
+  const resultDiv = document.getElementById('airData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados de qualidade do ar...';
   
   try {
-    // IMPORTANTE: Substitua por sua chave API válida
-    const apiKey = '88728331-dee0-40ae-89b4-b267cbc9e0de'; 
+    const apiKey = '88728331-dee0-40ae-89b4-b267cbc9e0de'; // Substitua por sua chave
     const url = `http://api.airvisual.com/v2/city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&country=Brazil&key=${apiKey}`;
     
     const response = await fetch(url);
@@ -64,31 +114,32 @@ document.getElementById('testAir').addEventListener('click', async () => {
       throw new Error(data.data?.message || 'Erro na API');
     }
     
-    const aqi = data.data.current.pollution.aqius;
+    const pollution = data.data.current.pollution;
+    const aqi = pollution.aqius;
     const level = getAqiLevel(aqi);
     const color = getAqiColor(aqi);
     
-    // Mostra resultados
     resultDiv.innerHTML = `
-      <div style="background: ${color}; padding: 15px; border-radius: 8px; color: white;">
-        <h3>Qualidade do Ar em ${city}, ${state}</h3>
-        <p style="font-size: 2rem; margin: 10px 0;">AQI: <strong>${aqi}</strong></p>
-        <p style="font-size: 1.2rem;">Nível: <strong>${level}</strong></p>
+      <div class="air-quality-card" style="background:${color}">
+        <h3>${city}, ${state}</h3>
+        <div class="aqi-value">${aqi}</div>
+        <div class="aqi-level">${level}</div>
+        <div class="details">
+          <p>Poluente: ${pollution.mainus || 'Não especificado'}</p>
+          <p>Atualizado: ${new Date(pollution.ts).toLocaleString()}</p>
+        </div>
       </div>
     `;
     
-    // Atualiza gráfico
     updateAirChart(aqi);
     
   } catch (error) {
     resultDiv.innerHTML = `
       <div class="error">
         Falha ao buscar dados de qualidade do ar:<br>
-        ${error.message}<br><br>
-        <small>Certifique-se de usar uma chave API válida do IQAir</small>
+        ${error.message}
       </div>
     `;
-    console.error('Erro IQAir:', error);
   }
 });
 
@@ -158,8 +209,27 @@ function updateAirChart(aqi) {
     }
   });
   
-  // Destaca o nível atual
   const level = Math.min(Math.floor(aqi / 50), 4);
   airChart.data.datasets[0].data[level] = 1;
   airChart.update();
 }
+
+// Event Listeners
+document.getElementById('fetchFires').addEventListener('click', () => {
+  const region = document.getElementById('regionSelect').value || currentRegion;
+  fetchFiresByRegion(region);
+});
+
+document.querySelectorAll('.region-buttons button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentRegion = btn.dataset.region;
+    document.getElementById('regionSelect').value = currentRegion;
+    fetchFiresByRegion(currentRegion);
+  });
+});
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  fetchFiresByRegion(currentRegion);
+});
