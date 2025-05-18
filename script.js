@@ -6,10 +6,15 @@ let map = null;
 let currentRegion = 'Norte';
 const OPENWEATHER_API_KEY = '709a870446d4a4da539f2cc0e452fce6'; // Substitua pela sua chave OpenWeatherMap
 
+const ALERT_THRESHOLDS = {
+  fires: 10, // Número de focos para disparar alerta
+  aqi: 3 // Índice de qualidade do ar (1-5)
+};
+
 // Inicialização do mapa
 function initMap() {
   map = L.map('brazilMap').setView([-15, -55], 4);
-  
+
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(map);
@@ -45,23 +50,23 @@ function initMap() {
 async function fetchFiresByRegion(region) {
   const resultDiv = document.getElementById('firesData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados de queimadas...';
-  
+
   try {
     const apiKey = '1470d8fd6a62ad792549e276f5653cea';
     const country = 'BRA';
     const url = `https://firms.modaps.eosdis.nasa.gov/api/country/csv/${apiKey}/VIIRS_SNPP_NRT/${country}/1`;
-    
+
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
-    
+
     const data = await response.text();
     const lines = data.split('\n').slice(1).filter(line => line.trim() !== '');
-    
+
     // Filtra por região (corrigido case sensitivity)
     const regionFires = lines.filter(line => {
       const lat = parseFloat(line.split(',')[1]);
       if (isNaN(lat)) return false;
-      
+
       if (region === 'Norte') return lat < -2;
       if (region === 'Nordeste') return lat > -10 && lat < -2;
       if (region === 'Centro-Oeste') return lat > -15 && lat < -10;
@@ -76,19 +81,21 @@ async function fetchFiresByRegion(region) {
       <p>Total de focos: <strong>${regionFires.length}</strong></p>
       <div class="fires-list">
         ${regionFires.slice(0, 10).map(line => {
-          const [_, lat, long, brightness, acq_date] = line.split(',');
-          return `
+      const [_, lat, long, brightness, acq_date] = line.split(',');
+      return `
             <div class="fire-point">
               <strong>${lat}, ${long}</strong><br>
               ${brightness}°C - ${acq_date}
             </div>
           `;
-        }).join('')}
+    }).join('')}
       </div>
     `;
-    
+
     updateFiresChart(regionFires.length);
-    
+    if (regionFires.length >= ALERT_THRESHOLDS.fires) {
+      addAlert('fire', `${regionFires.length} focos de queimadas detectados`, region);
+    }
   } catch (error) {
     resultDiv.innerHTML = `
       <div class="error">
@@ -106,41 +113,41 @@ document.getElementById('fetchAir').addEventListener('click', async () => {
   const city = document.getElementById('citySelect').value;
   const resultDiv = document.getElementById('airData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados de qualidade do ar...';
-  
+
   try {
     if (!OPENWEATHER_API_KEY || OPENWEATHER_API_KEY === 'SUA_CHAVE_AQUI') {
       throw new Error('Por favor, configure sua chave da API OpenWeatherMap no código');
     }
-    
+
     // 1. Primeiro obtemos as coordenadas da cidade
     const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)},BR&limit=1&appid=${OPENWEATHER_API_KEY}`;
     const geoResponse = await fetch(geoUrl);
-    
+
     if (!geoResponse.ok) {
       const errorData = await geoResponse.json();
       throw new Error(errorData.message || 'Erro ao buscar localização');
     }
-    
+
     const geoData = await geoResponse.json();
-    
+
     if (!geoData.length) throw new Error('Cidade não encontrada. Tente outra cidade ou verifique o nome.');
-    
+
     const { lat, lon } = geoData[0];
-    
+
     // 2. Agora obtemos os dados de poluição
     const airUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}`;
     const airResponse = await fetch(airUrl);
-    
+
     if (!airResponse.ok) {
       const errorData = await airResponse.json();
       throw new Error(errorData.message || 'Erro ao buscar qualidade do ar');
     }
-    
+
     const airData = await airResponse.json();
-    
+
     const aqi = airData.list[0].main.aqi;
     const components = airData.list[0].components;
-    
+
     // Mapeia os níveis de qualidade do ar
     const aqiLevels = [
       'Boa 🌱', 'Moderada 😐', 'Ruim para grupos sensíveis 😷',
@@ -148,12 +155,12 @@ document.getElementById('fetchAir').addEventListener('click', async () => {
     ];
     const level = aqiLevels[aqi - 1] || 'Desconhecido';
     const color = getAqiColor(aqi * 20);
-    
+
     // Encontra o poluente principal
-    const mainPollutant = Object.entries(components).reduce((a, b) => 
+    const mainPollutant = Object.entries(components).reduce((a, b) =>
       a[1] > b[1] ? a : b
     )[0];
-    
+
     resultDiv.innerHTML = `
       <div class="air-quality-card" style="background:${color}">
         <h3>${city}</h3>
@@ -166,9 +173,9 @@ document.getElementById('fetchAir').addEventListener('click', async () => {
         </div>
       </div>
     `;
-    
+
     updateAirChart(aqi * 20);
-    
+
   } catch (error) {
     resultDiv.innerHTML = `
       <div class="error">
@@ -185,7 +192,7 @@ document.getElementById('fetchAir').addEventListener('click', async () => {
 async function fetchWeather(city) {
   const resultDiv = document.getElementById('weatherData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados meteorológicos...';
-  
+
   try {
     if (!OPENWEATHER_API_KEY) {
       throw new Error('Chave API não configurada');
@@ -194,36 +201,36 @@ async function fetchWeather(city) {
     // 1. Obter coordenadas da cidade
     const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)},BR&limit=1&appid=${OPENWEATHER_API_KEY}`;
     const geoResponse = await fetch(geoUrl);
-    
+
     if (!geoResponse.ok) {
       throw new Error('Erro ao buscar localização');
     }
-    
+
     const geoData = await geoResponse.json();
     if (!geoData.length) throw new Error('Cidade não encontrada');
-    
+
     const { lat, lon } = geoData[0];
-    
+
     // 2. Obter previsão do tempo
     const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=pt_br`;
     const weatherResponse = await fetch(weatherUrl);
-    
+
     if (!weatherResponse.ok) {
       throw new Error('Erro ao buscar previsão do tempo');
     }
-    
+
     const weatherData = await weatherResponse.json();
-    
+
     // 3. Obter previsão para os próximos dias
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=pt_br&cnt=5`;
     const forecastResponse = await fetch(forecastUrl);
-    
+
     if (!forecastResponse.ok) {
       throw new Error('Erro ao buscar previsão extendida');
     }
-    
+
     const forecastData = await forecastResponse.json();
-    
+
     // Processar dados
     const weather = {
       temp: Math.round(weatherData.main.temp),
@@ -239,7 +246,7 @@ async function fetchWeather(city) {
         description: item.weather[0].description
       }))
     };
-    
+
     // Exibir resultados
     resultDiv.innerHTML = `
       <div class="weather-card">
@@ -288,9 +295,9 @@ async function fetchWeather(city) {
         </div>
       </div>
     `;
-    
+
     updateWeatherChart(weather.forecast);
-    
+
   } catch (error) {
     resultDiv.innerHTML = `
       <div class="error">
@@ -304,9 +311,9 @@ async function fetchWeather(city) {
 
 function updateWeatherChart(forecast) {
   const ctx = document.getElementById('weatherChart');
-  
+
   if (weatherChart) weatherChart.destroy();
-  
+
   weatherChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -362,9 +369,9 @@ function getAqiColor(aqi) {
 
 function updateFiresChart(count) {
   const ctx = document.getElementById('firesChart');
-  
+
   if (firesChart) firesChart.destroy();
-  
+
   firesChart = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -388,9 +395,9 @@ function updateFiresChart(count) {
 
 function updateAirChart(aqi) {
   const ctx = document.getElementById('airChart');
-  
+
   if (airChart) airChart.destroy();
-  
+
   airChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -406,10 +413,58 @@ function updateAirChart(aqi) {
       cutout: '70%'
     }
   });
-  
+
   const level = Math.min(Math.floor(aqi / 50), 4);
   airChart.data.datasets[0].data[level] = 1;
   airChart.update();
+}
+
+function addAlert(type, message, regionOrCity = '') {
+  const alertsList = document.getElementById('alertsList');
+  const alertClass = type === 'fire' ? 'alert-fire' : 'alert-air';
+  const alertIcon = type === 'fire' ? '🔥' : '🌫️';
+
+  const alertItem = document.createElement('div');
+  alertItem.className = `alert-item ${alertClass}`;
+  alertItem.innerHTML = `
+    <div class="alert-icon">${alertIcon}</div>
+    <div class="alert-content">
+      <strong>${type === 'fire' ? 'Queimadas' : 'Qualidade do Ar'}</strong>
+      <p>${message} ${regionOrCity ? `em ${regionOrCity}` : ''}</p>
+      <div class="alert-time">${new Date().toLocaleTimeString()}</div>
+    </div>
+  `;
+
+  // Adiciona no início da lista
+  alertsList.insertBefore(alertItem, alertsList.firstChild);
+
+  // Limita a 5 alertas
+  if (alertsList.children.length > 5) {
+    alertsList.removeChild(alertsList.lastChild);
+  }
+
+  // Notificação do navegador (se permitido)
+  if (Notification.permission === 'granted') {
+    new Notification(`Alerta Ambiental: ${type === 'fire' ? 'Queimadas' : 'Qualidade do Ar'}`, {
+      body: message
+    });
+  }
+}
+
+// Solicita permissão para notificações
+function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    console.log('Este navegador não suporta notificações');
+    return;
+  }
+
+  if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        console.log('Permissão para notificações concedida');
+      }
+    });
+  }
 }
 
 // Event Listeners
@@ -435,6 +490,7 @@ document.querySelectorAll('.region-buttons button').forEach(btn => {
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   fetchFiresByRegion(currentRegion);
+  requestNotificationPermission();
   
   // Carrega dados iniciais para a primeira cidade
   const initialCity = document.getElementById('citySelect').value;
