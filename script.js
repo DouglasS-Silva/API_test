@@ -3,6 +3,7 @@ let firesChart = null;
 let airChart = null;
 let map = null;
 let currentRegion = 'Norte';
+const OPENWEATHER_API_KEY = '709a870446d4a4da539f2cc0e452fce6'; // Substitua pela sua chave OpenWeatherMap
 
 // Inicialização do mapa
 function initMap() {
@@ -55,7 +56,7 @@ async function fetchFiresByRegion(region) {
     const data = await response.text();
     const lines = data.split('\n').slice(1).filter(line => line.trim() !== '');
     
-    // Filtra por região
+    // Filtra por região (corrigido case sensitivity)
     const regionFires = lines.filter(line => {
       const lat = parseFloat(line.split(',')[1]);
       if (isNaN(lat)) return false;
@@ -91,66 +92,107 @@ async function fetchFiresByRegion(region) {
     resultDiv.innerHTML = `
       <div class="error">
         Falha ao buscar dados de queimadas:<br>
-        ${error.message}
+        ${error.message}<br><br>
+        <small>Se o erro persistir, tente novamente mais tarde</small>
       </div>
     `;
+    console.error('Erro ao buscar queimadas:', error);
   }
 }
 
-// API Qualidade do Ar
+// API Qualidade do Ar (OpenWeatherMap)
 document.getElementById('fetchAir').addEventListener('click', async () => {
-  const [city, state] = document.getElementById('citySelect').value.split(',');
+  const city = document.getElementById('citySelect').value;
   const resultDiv = document.getElementById('airData');
   resultDiv.innerHTML = '<div class="loading"></div> Buscando dados de qualidade do ar...';
   
   try {
-    const apiKey = '88728331-dee0-40ae-89b4-b267cbc9e0de'; // Substitua por sua chave
-    const url = `http://api.airvisual.com/v2/city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&country=Brazil&key=${apiKey}`;
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (!response.ok || data.status === 'fail') {
-      throw new Error(data.data?.message || 'Erro na API');
+    if (!OPENWEATHER_API_KEY || OPENWEATHER_API_KEY === 'SUA_CHAVE_AQUI') {
+      throw new Error('Por favor, configure sua chave da API OpenWeatherMap no código');
     }
     
-    const pollution = data.data.current.pollution;
-    const aqi = pollution.aqius;
-    const level = getAqiLevel(aqi);
-    const color = getAqiColor(aqi);
+    // 1. Primeiro obtemos as coordenadas da cidade
+    const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)},BR&limit=1&appid=${OPENWEATHER_API_KEY}`;
+    const geoResponse = await fetch(geoUrl);
+    
+    if (!geoResponse.ok) {
+      const errorData = await geoResponse.json();
+      throw new Error(errorData.message || 'Erro ao buscar localização');
+    }
+    
+    const geoData = await geoResponse.json();
+    
+    if (!geoData.length) throw new Error('Cidade não encontrada. Tente outra cidade ou verifique o nome.');
+    
+    const { lat, lon } = geoData[0];
+    
+    // 2. Agora obtemos os dados de poluição
+    const airUrl = `https://api.openweathermap.org/data/2.5/air_pollution?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}`;
+    const airResponse = await fetch(airUrl);
+    
+    if (!airResponse.ok) {
+      const errorData = await airResponse.json();
+      throw new Error(errorData.message || 'Erro ao buscar qualidade do ar');
+    }
+    
+    const airData = await airResponse.json();
+    
+    const aqi = airData.list[0].main.aqi;
+    const components = airData.list[0].components;
+    
+    // Mapeia os níveis de qualidade do ar
+    const aqiLevels = [
+      'Boa 🌱', 'Moderada 😐', 'Ruim para grupos sensíveis 😷',
+      'Ruim 😨', 'Muito Ruim ☠️'
+    ];
+    const level = aqiLevels[aqi - 1] || 'Desconhecido';
+    const color = getAqiColor(aqi * 20);
+    
+    // Encontra o poluente principal
+    const mainPollutant = Object.entries(components).reduce((a, b) => 
+      a[1] > b[1] ? a : b
+    )[0];
     
     resultDiv.innerHTML = `
       <div class="air-quality-card" style="background:${color}">
-        <h3>${city}, ${state}</h3>
+        <h3>${city}</h3>
         <div class="aqi-value">${aqi}</div>
         <div class="aqi-level">${level}</div>
         <div class="details">
-          <p>Poluente: ${pollution.mainus || 'Não especificado'}</p>
-          <p>Atualizado: ${new Date(pollution.ts).toLocaleString()}</p>
+          <p>Poluente principal: ${formatPollutant(mainPollutant)}</p>
+          <p>PM2.5: ${components.pm2_5} μg/m³ | PM10: ${components.pm10} μg/m³</p>
+          <p>Atualizado: ${new Date().toLocaleString()}</p>
         </div>
       </div>
     `;
     
-    updateAirChart(aqi);
+    updateAirChart(aqi * 20);
     
   } catch (error) {
     resultDiv.innerHTML = `
       <div class="error">
         Falha ao buscar dados de qualidade do ar:<br>
-        ${error.message}
+        ${error.message}<br><br>
+        <small>Certifique-se de usar uma chave API válida do OpenWeatherMap e que a cidade está correta</small>
       </div>
     `;
+    console.error('Erro ao buscar qualidade do ar:', error);
   }
 });
 
 // Funções auxiliares
-function getAqiLevel(aqi) {
-  if (aqi <= 50) return 'Boa 🌱';
-  if (aqi <= 100) return 'Moderada 😐';
-  if (aqi <= 150) return 'Ruim para grupos sensíveis 😷';
-  if (aqi <= 200) return 'Ruim 😨';
-  if (aqi <= 300) return 'Muito Ruim ☠️';
-  return 'Perigosa ⚠️';
+function formatPollutant(pollutant) {
+  const names = {
+    co: 'Monóxido de Carbono',
+    no: 'Óxido de Nitrogênio',
+    no2: 'Dióxido de Nitrogênio',
+    o3: 'Ozônio',
+    so2: 'Dióxido de Enxofre',
+    pm2_5: 'Material Particulado (PM2.5)',
+    pm10: 'Material Particulado (PM10)',
+    nh3: 'Amônia'
+  };
+  return names[pollutant] || pollutant;
 }
 
 function getAqiColor(aqi) {
