@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste APIs Ambientais</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>🌎 Teste de APIs Ambientais</h1>
+    
+    <section class="api-section">
+      <h2>🔥 Teste API Queimadas (NASA FIRMS)</h2>
+      <button id="testFires">Testar Queimadas</button>
+      <div id="firesResult" class="result"></div>
+      <canvas id="firesChart"></canvas>
+    </section>
+
+    <section class="api-section">
+      <h2>🌫️ Teste API Qualidade do Ar (IQAir)</h2>
+      <div class="input-group">
+        <select id="citySelect">
+          <option value="São Paulo,Sao Paulo">São Paulo, SP</option>
+          <option value="Rio de Janeiro,Rio de Janeiro">Rio de Janeiro, RJ</option>
+          <option value="Belo Horizonte,Minas Gerais">Belo Horizonte, MG</option>
+        </select>
+        <button id="testAir">Testar Qualidade do Ar</button>
+      </div>
+      <div id="airResult" class="result"></div>
+      <canvas id="airChart"></canvas>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
