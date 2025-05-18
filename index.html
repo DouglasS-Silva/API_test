@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,10 +12,15 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/weather-icons/2.0.12/css/weather-icons.min.css">
 </head>
+
 <body>
+  <div class="alerts-container" id="alertsContainer">
+    <h2>⚠️ Alertas Ambientais</h2>
+    <div id="alertsList" class="alerts-list"></div>
+  </div>
   <div class="container">
     <h1>🌎 Painel Ambiental do Brasil</h1>
-    
+
     <div class="map-container">
       <div id="brazilMap"></div>
       <div class="map-overlay">
@@ -28,7 +34,7 @@
         </div>
       </div>
     </div>
-    
+
     <section class="data-section">
       <div class="data-panel">
         <h2>🔥 Focos de Queimadas</h2>
@@ -46,7 +52,7 @@
         <div id="firesData" class="data-container"></div>
         <canvas id="firesChart"></canvas>
       </div>
-      
+
       <div class="data-panel">
         <h2>🌫️ Qualidade do Ar</h2>
         <div class="input-group">
@@ -85,4 +91,5 @@
 
   <script src="script.js"></script>
 </body>
+
 </html>
